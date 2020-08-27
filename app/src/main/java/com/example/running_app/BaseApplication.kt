@@ -2,6 +2,7 @@ package com.example.running_app
 
 import android.app.Application
 import dagger.hilt.android.HiltAndroidApp
+import timber.log.Timber
 
 @HiltAndroidApp
 class BaseApplication : Application(){
@@ -19,5 +20,8 @@ class BaseApplication : Application(){
     (for dependency injection for instance). For instance if you want to share a singleton between activities,
     you can create the instance in the application class and provide a getter, then all other contexts can get the singleton via*/
 
-
+    override fun onCreate() {
+        super.onCreate()
+        Timber.plant(Timber.DebugTree()) // not for DI
+    }
 }
