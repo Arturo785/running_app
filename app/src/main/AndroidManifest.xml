@@ -23,6 +23,9 @@
             </intent-filter>
         </activity>
 
+        <service android:name=".services.TrackingService"
+            android:foregroundServiceType="location" />
+
         <!--Maps usage -->
         <meta-data
             android:name="com.google.android.gms.version"
