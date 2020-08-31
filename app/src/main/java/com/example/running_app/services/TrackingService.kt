@@ -49,7 +49,7 @@ class TrackingService : LifecycleService() {
 
 
     private var _isFirstRun = true
-    lateinit var fusedLocationProviderClient: FusedLocationProviderClient
+    private lateinit var fusedLocationProviderClient: FusedLocationProviderClient
 
     //To be able to observe the data from any part (STATIC)
     companion object{
@@ -64,6 +64,13 @@ class TrackingService : LifecycleService() {
 
     //Sets the 1st list of polyLines to empty and post that empty result or if it is null
     // initialises the list
+    //Update
+    //What really does is
+    // 1.- If is null initializes the lists
+    // 2.- If the service is paused the fun is called again in the OnStartCommand
+    // and because of that adds a new list to the new set of polyLines
+    // this is because if the fragment is recreated it will connect different lists (if existent)
+    // that appear to be different lines instead of a continue one
     private fun addEmptyPolyLine() =
         pathPoints.value?.apply {
             add(mutableListOf())
@@ -77,6 +84,7 @@ class TrackingService : LifecycleService() {
             val pos = LatLng(location.latitude,location.longitude)
 
             pathPoints.value?.apply {
+                // applies it to the last PolyLine retrieved
                 last().add(pos) // gets the last list
                 pathPoints.postValue(this) //Posts changed list to the liveData
             }
@@ -96,11 +104,13 @@ class TrackingService : LifecycleService() {
                         Timber.d("Started service")
                     }
                     else{
+                        startForegroundService()
                         Timber.d("Resumed service")
                     }
                 }
                 ACTION_PAUSE_SERVICE -> {
                     Timber.d("Paused service")
+                    pauseService()
                 }
                 ACTION_STOP_SERVICE -> {
                     Timber.d("Stopped service")
@@ -204,6 +214,11 @@ class TrackingService : LifecycleService() {
                 }
             }
         }
+    }
+
+    //to change the value observed and used within the service
+    private fun pauseService(){
+        isTracking.postValue(false)
     }
 
 }
