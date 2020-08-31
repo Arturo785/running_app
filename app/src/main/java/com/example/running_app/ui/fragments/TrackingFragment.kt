@@ -33,6 +33,8 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking){
     private var _isTracking = false
     private var _pathPoints = mutableListOf<PolyLine>()
 
+    private var _currentTimeInMillis = 0L
+
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -173,6 +175,12 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking){
             _pathPoints = it // receives new PolyLines
             addLatestPolyLine() // draw into the map
             moveCameraToUser()
+        })
+
+        TrackingService._timeRunInMilliSeconds.observe(viewLifecycleOwner, Observer {
+            _currentTimeInMillis = it
+            val formattedTime = TrackingUtility.getFormattedStopWatchTime(_currentTimeInMillis, true)
+            tvTimer.text = formattedTime
         })
     }
 

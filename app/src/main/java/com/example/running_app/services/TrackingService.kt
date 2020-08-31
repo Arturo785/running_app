@@ -25,6 +25,10 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationRequest.PRIORITY_HIGH_ACCURACY
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.maps.model.LatLng
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import timber.log.Timber
 
 typealias PolyLine = MutableList<LatLng> //Lines
@@ -51,15 +55,26 @@ class TrackingService : LifecycleService() {
     private var _isFirstRun = true
     private lateinit var fusedLocationProviderClient: FusedLocationProviderClient
 
+    //Clock variables
+    private val _timeRunInSeconds = MutableLiveData<Long>()
+    private var _isTimerEnabled = false
+    private var _lapTime = 0L
+    private var _totalRunTime = 0L
+    private var _timeStarted = 0L
+    private var _lastSecondTimeStamp = 0L
+
     //To be able to observe the data from any part (STATIC)
     companion object{
         val isTracking = MutableLiveData<Boolean>()
         val pathPoints = MutableLiveData<PolyLinesList>()
+        val _timeRunInMilliSeconds = MutableLiveData<Long>()
     }
 
     private fun postInitialValues(){
         isTracking.postValue(false)
         pathPoints.postValue(mutableListOf()) //an empty list
+        _timeRunInSeconds.postValue(0L)
+        _timeRunInMilliSeconds.postValue(0L)
     }
 
     //Sets the 1st list of polyLines to empty and post that empty result or if it is null
@@ -67,7 +82,7 @@ class TrackingService : LifecycleService() {
     //Update
     //What really does is
     // 1.- If is null initializes the lists
-    // 2.- If the service is paused the fun is called again in the OnStartCommand
+    // 2.- If the service is paused the fun is called again in the startTimer
     // and because of that adds a new list to the new set of polyLines
     // this is because if the fragment is recreated it will connect different lists (if existent)
     // that appear to be different lines instead of a continue one
@@ -104,7 +119,7 @@ class TrackingService : LifecycleService() {
                         Timber.d("Started service")
                     }
                     else{
-                        startForegroundService()
+                        startTimer()
                         Timber.d("Resumed service")
                     }
                 }
@@ -131,9 +146,7 @@ class TrackingService : LifecycleService() {
     }
 
     private fun startForegroundService(){
-        addEmptyPolyLine() // to be able to save the tracking
-        isTracking.postValue(true) // begins to track
-
+        startTimer()
         // a service from android OS that we need in order to show a notification
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -219,6 +232,35 @@ class TrackingService : LifecycleService() {
     //to change the value observed and used within the service
     private fun pauseService(){
         isTracking.postValue(false)
+        _isTimerEnabled = false
+    }
+
+    private fun startTimer(){
+        addEmptyPolyLine() // to be able to save the tracking
+        isTracking.postValue(true) // begins to track
+        _timeStarted = System.currentTimeMillis()
+        _isTimerEnabled = true
+
+        CoroutineScope(Dispatchers.Main).launch {
+            while (isTracking.value!!){
+                //Time difference
+                _lapTime = System.currentTimeMillis() - _timeStarted
+
+                //Update the live data with new times
+                _timeRunInMilliSeconds.postValue(_totalRunTime + _lapTime)
+
+                //to simulate the seconds passed in a human way
+                //and refresh the time in seconds every second
+                if (_timeRunInMilliSeconds.value!! >= _lastSecondTimeStamp + 1000L){
+                    _timeRunInSeconds.postValue(_timeRunInSeconds.value!! + 1)
+                    _lastSecondTimeStamp += 1000L // to not lose the count
+                }
+                //to make it easy on the OS and not consume that much resources
+                delay(TIMER_UPDATE_INTERVAL)
+            }
+            _totalRunTime += _lapTime
+        }
+
     }
 
 }
