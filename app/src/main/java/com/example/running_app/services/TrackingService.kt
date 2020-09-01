@@ -68,6 +68,8 @@ class TrackingService : LifecycleService() {
 
     lateinit var currentNotificationBuilder : NotificationCompat.Builder
 
+    var _servicedKilled = false
+
 
     //Clock variables
     private val _timeRunInSeconds = MutableLiveData<Long>()
@@ -143,6 +145,7 @@ class TrackingService : LifecycleService() {
                 }
                 ACTION_STOP_SERVICE -> {
                     Timber.d("Stopped service")
+                    killService()
                 }
             }
         }
@@ -180,9 +183,11 @@ class TrackingService : LifecycleService() {
 
         //We have the observer in here to make use of the notificationManager
         _timeRunInSeconds.observe(this, Observer {
-            val notification = currentNotificationBuilder
-                .setContentText(TrackingUtility.getFormattedStopWatchTime(it * 1000L)) //to make it MS
-            notificationManager.notify(NOTIFICATION_ID, notification.build())
+            if (!_servicedKilled) {
+                val notification = currentNotificationBuilder
+                    .setContentText(TrackingUtility.getFormattedStopWatchTime(it * 1000L)) //to make it MS
+                notificationManager.notify(NOTIFICATION_ID, notification.build())
+            }
         })
     }
 
@@ -298,11 +303,22 @@ class TrackingService : LifecycleService() {
             set(currentNotificationBuilder, ArrayList<NotificationCompat.Action>())
         }
 
-        currentNotificationBuilder = baseNotificationBuilder
-            .addAction(R.drawable.ic_pause_black_24dp, notificationActionText, pendingIntent)
+        if (!_servicedKilled){
+            currentNotificationBuilder = baseNotificationBuilder
+                .addAction(R.drawable.ic_pause_black_24dp, notificationActionText, pendingIntent)
 
-        //As long it is the same ID it "updates" the notification
-        notificationManager.notify(NOTIFICATION_ID, currentNotificationBuilder.build())
+            //As long it is the same ID it "updates" the notification
+            notificationManager.notify(NOTIFICATION_ID, currentNotificationBuilder.build())
+        }
+    }
+
+    private fun killService(){
+        _servicedKilled = true // resets the initials values and kills the service
+        _isFirstRun = true
+        pauseService()
+        postInitialValues()
+        stopForeground(true)
+        stopSelf()
     }
 
 
