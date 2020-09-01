@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.NotificationManager.IMPORTANCE_LOW
 import android.app.PendingIntent
 import android.app.PendingIntent.FLAG_UPDATE_CURRENT
+import android.app.PendingIntent.getService
 import android.content.Context
 import android.content.Intent
 import android.location.Location
@@ -25,16 +26,20 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationRequest.PRIORITY_HIGH_ACCURACY
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.maps.model.LatLng
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.util.ArrayList
+import javax.inject.Inject
 
 typealias PolyLine = MutableList<LatLng> //Lines
 typealias PolyLinesList = MutableList<PolyLine> //multiple lists of lines
 
 // inherits from lifeCycleService instead of Service because needs to be observed from other parts
+@AndroidEntryPoint
 class TrackingService : LifecycleService() {
 
     //SERVICES
@@ -53,7 +58,16 @@ class TrackingService : LifecycleService() {
 
 
     private var _isFirstRun = true
-    private lateinit var fusedLocationProviderClient: FusedLocationProviderClient
+
+
+    //Injected properties
+    @Inject
+    lateinit var fusedLocationProviderClient: FusedLocationProviderClient
+    @Inject
+    lateinit var baseNotificationBuilder : NotificationCompat.Builder
+
+    lateinit var currentNotificationBuilder : NotificationCompat.Builder
+
 
     //Clock variables
     private val _timeRunInSeconds = MutableLiveData<Long>()
@@ -137,12 +151,16 @@ class TrackingService : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
+        currentNotificationBuilder = baseNotificationBuilder // Use as an auxiliar
         postInitialValues()
-        fusedLocationProviderClient = FusedLocationProviderClient(this) // needed to track the location
+      //  fusedLocationProviderClient = FusedLocationProviderClient(this) // needed to track the location
+        // injected
 
         isTracking.observe(this, Observer {
-            updateLocationTracking(it)
+            updateLocationTracking(it) // changes the location
+            updateNotificationTrackingState(it) //Changes the buttons of the notification
         })
+
     }
 
     private fun startForegroundService(){
@@ -156,30 +174,18 @@ class TrackingService : LifecycleService() {
             createNotificationChannel(notificationManager)
         }
 
-        val notificationBuilder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setAutoCancel(false) //not disappear when touching
-            .setOngoing(true) // can't be swiped away
-            .setSmallIcon(R.drawable.ic_run)
-            .setContentTitle("Running app")
-            .setContentText("00:00:00")
-            .setContentIntent(getMainActivityPendingIntent()) // declares what to do or where to go when the
-            //notification is touched
-
         //Starts the service as foreground with the prev config
-        startForeground(NOTIFICATION_ID,notificationBuilder.build())
+        //Receives the baseNotification through injection
+        startForeground(NOTIFICATION_ID,baseNotificationBuilder.build())
+
+        //We have the observer in here to make use of the notificationManager
+        _timeRunInSeconds.observe(this, Observer {
+            val notification = currentNotificationBuilder
+                .setContentText(TrackingUtility.getFormattedStopWatchTime(it * 1000L)) //to make it MS
+            notificationManager.notify(NOTIFICATION_ID, notification.build())
+        })
     }
 
-    //To define what to do when touching the notification
-    private fun getMainActivityPendingIntent() =
-        PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this,MainActivity::class.java).also {
-                it.action = ACTION_SHOW_TRACKING_FRAGMENT // constant to control what action is needed with the intent
-            },
-            FLAG_UPDATE_CURRENT // if the intent already existed it will update it instead of
-        // creating a new one
-        )
 
     //Needs Oreo or newer
     @RequiresApi(Build.VERSION_CODES.O)
@@ -262,5 +268,42 @@ class TrackingService : LifecycleService() {
         }
 
     }
+
+    //When clicked the notification buttons this is what will happen when touching the button in the notification
+    private fun updateNotificationTrackingState(isTracking: Boolean){
+        val notificationActionText = if (isTracking) "Pause" else "Resume"
+
+        // creates the pending intent (what will happen when touching the button in the notification)
+        //Uses getService cause it will attach a service
+        val pendingIntent = if (isTracking){
+            val pauseIntent = Intent(this, TrackingService::class.java).apply {
+                action = ACTION_PAUSE_SERVICE
+            }
+            PendingIntent.getService(this, 1, pauseIntent, FLAG_UPDATE_CURRENT)
+        }
+        else{
+            val resumeIntent = Intent(this, TrackingService::class.java).apply {
+                action = ACTION_START_OR_RESUME_SERVICE
+            }
+            getService(this,2, resumeIntent, FLAG_UPDATE_CURRENT)
+        }
+
+
+        // a service from android OS that we need in order to show a notification
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        //Removes previous actions given in the notification
+        currentNotificationBuilder.javaClass.getDeclaredField("mActions").apply {
+            isAccessible = true
+            set(currentNotificationBuilder, ArrayList<NotificationCompat.Action>())
+        }
+
+        currentNotificationBuilder = baseNotificationBuilder
+            .addAction(R.drawable.ic_pause_black_24dp, notificationActionText, pendingIntent)
+
+        //As long it is the same ID it "updates" the notification
+        notificationManager.notify(NOTIFICATION_ID, currentNotificationBuilder.build())
+    }
+
 
 }
