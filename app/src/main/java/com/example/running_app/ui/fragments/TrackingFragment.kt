@@ -9,16 +9,21 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Observer
 import androidx.navigation.fragment.findNavController
 import com.example.running_app.R
+import com.example.running_app.models.Run
 import com.example.running_app.services.PolyLine
 import com.example.running_app.services.TrackingService
 import com.example.running_app.ui.viewmodels.MainViewModel
 import com.example.running_app.utils.*
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.PolylineOptions
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.android.synthetic.main.fragment_tracking.*
+import java.util.*
+import kotlin.math.round
 
 
 // when injecting into an android component like activity and etc
@@ -40,6 +45,9 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking){
 
     private var menu : Menu? = null
 
+    //Mocked weight, not saved yet
+    private var weight = 80f
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -56,6 +64,11 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking){
 
         btnToggleRun.setOnClickListener {
             toggleRun()
+        }
+
+        btnFinishRun.setOnClickListener {
+            zoomToSeeWholeTrack() // centers the map to make the snapShot
+            endRunAndSaveToDb() // //makes the snapshot and saves
         }
 
         mapView.getMapAsync{
@@ -243,6 +256,58 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking){
             }
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    //Prepares the map to do the screenShot to save the run
+    private fun zoomToSeeWholeTrack(){
+        val bounds = LatLngBounds.Builder()
+        //Adds all the available lines into the bounds
+        for (lines in _pathPoints){
+            for (pos in lines){
+                bounds.include(pos)
+            }
+        }
+
+        map?.moveCamera(
+            CameraUpdateFactory.newLatLngBounds(
+                bounds.build(),
+                mapView.width,
+                mapView.height,
+                (mapView.height * 0.05f).toInt() // the padding
+            )
+        )
+    }
+
+    private fun endRunAndSaveToDb(){
+        map?.snapshot { bmp ->
+            var distanceInMeters = 0
+
+            _pathPoints.forEach{
+                distanceInMeters += TrackingUtility.calculatePolyDistanceLenght(it).toInt()
+            }
+
+            val averageSpeed = round((distanceInMeters / 1000f) / (_currentTimeInMillis / 1000f / 60 / 60) * 10) / 10f
+            val dateTimestamp = Calendar.getInstance().timeInMillis
+            val caloriesBurned = ((distanceInMeters / 1000f) * weight).toInt()
+
+            val run = Run(
+                bmp,
+                dateTimestamp,
+                averageSpeed,
+                distanceInMeters,
+                _currentTimeInMillis,
+                caloriesBurned
+            )
+
+            viewModel.insertRun(run)
+
+            Snackbar.make(
+                requireActivity().findViewById(R.id.rootView), // this is because we navigate to another view after this
+                "Run saved successfully",
+                Snackbar.LENGTH_LONG).show()
+
+            stopRun()
+        }
     }
 
 }
