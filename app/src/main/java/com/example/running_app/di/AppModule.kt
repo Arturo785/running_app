@@ -1,9 +1,11 @@
 package com.example.running_app.di
 
 import android.content.Context
+import android.content.Context.MODE_PRIVATE
+import android.content.SharedPreferences
 import androidx.room.Room
 import com.example.running_app.db.RunDB
-import com.example.running_app.utils.RUN_DATABASE_NAME
+import com.example.running_app.utils.*
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -36,4 +38,24 @@ object AppModule{
     @Singleton
     @Provides// dagger knows how to create the Db because we did it in the previous provide method
     fun providesRunDao(db : RunDB) = db.getRunDao()  // is not a must to be up or down just to be a way to create it
+
+    @Singleton
+    @Provides
+    fun provideSharedPreferences(@ApplicationContext app: Context) =
+        app.getSharedPreferences(SHARED_PREFERENCES_NAME,MODE_PRIVATE)
+
+    @Singleton
+    @Provides
+    fun providesName(sharedPreferencesObject: SharedPreferences) =
+        sharedPreferencesObject.getString(KEY_NAME, "") ?: ""
+
+    @Singleton
+    @Provides
+    fun providesWeight(sharedPreferencesObject: SharedPreferences) =
+        sharedPreferencesObject.getFloat(KEY_WEIGHT, 80f)
+
+    @Singleton
+    @Provides
+    fun providesFirstTimeToggle(sharedPreferencesObject: SharedPreferences) =
+        sharedPreferencesObject.getBoolean(KEY_FIRST_TIME_TOgGLE, true)
 }
