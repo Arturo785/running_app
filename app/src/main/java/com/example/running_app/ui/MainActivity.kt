@@ -33,6 +33,7 @@ class MainActivity : AppCompatActivity() {
 
         //Setup our navigation
         bottomNavigationView.setupWithNavController(navHostFragment.findNavController())
+        bottomNavigationView.setOnNavigationItemReselectedListener { /*Do nothing*/ }
 
         //We do this because they are certain fragments that we don't want the bottomNav to be visible
         navHostFragment.findNavController()

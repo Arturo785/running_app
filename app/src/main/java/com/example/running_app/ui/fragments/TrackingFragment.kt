@@ -26,6 +26,7 @@ import java.util.*
 import javax.inject.Inject
 import kotlin.math.round
 
+const val CANCEL_TRACKING_DIALOG_TAG = "cancelDialog"
 
 // when injecting into an android component like activity and etc
 // also to allow the injection of fields
@@ -66,6 +67,15 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking){
 
         btnToggleRun.setOnClickListener {
             toggleRun()
+        }
+
+        //When we rotate the screen
+        if (savedInstanceState != null){
+            val cancelTrackingDialog = parentFragmentManager.findFragmentByTag(
+                CANCEL_TRACKING_DIALOG_TAG) as CancelTrackingDialog?
+            cancelTrackingDialog?.setYesListener {
+                stopRun()
+            }
         }
 
         btnFinishRun.setOnClickListener {
@@ -184,11 +194,11 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking){
     //Fun called by the observed data from the service called by the button that gives the commands
     private fun updateTracking(isTracking : Boolean){
         this._isTracking = isTracking
-        if(!isTracking){
+        if(!isTracking && _currentTimeInMillis > 0L){ // has started at some point
             btnToggleRun.text = "Start"
             btnFinishRun.visibility = View.VISIBLE
         }
-        else{
+        else if(isTracking){
             btnToggleRun.text = "Stop"
             menu?.getItem(0)?.isVisible = true
             btnFinishRun.visibility = View.GONE
@@ -231,22 +241,16 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking){
     }
 
     private fun showCancelAlertDialog(){
-        val dialog = MaterialAlertDialogBuilder(requireContext(), R.style.AlertDialogTheme)
-            .setTitle("Cancel the run?")
-            .setMessage("Are you sure you want to cancel the run?")
-            .setIcon(R.drawable.ic_delete)
-            .setPositiveButton("Yes"){ _,_ ->
-                stopRun()
+        CancelTrackingDialog().apply {
+            setYesListener {
+                stopRun() // sets the lambda to it
             }
-            .setNegativeButton("No"){dialogInter,_ ->
-                dialogInter.cancel()
-            }
-            .create()
-        dialog.show()
+        }.show(parentFragmentManager, CANCEL_TRACKING_DIALOG_TAG)
     }
 
     //Sends the signal rto stop the service
     private fun stopRun(){
+        tvTimer.text = "00:00:00:00"
         sendCommandToService(ACTION_STOP_SERVICE)
         findNavController().navigate(R.id.action_trackingFragment_to_runFragment)
     }
